@@ -80,6 +80,8 @@
             will-change: transform;
             transition: transform 0.15s ease;
             transform-style: preserve-3d;
+            overflow: hidden;
+            border-radius: 50%;
         }
 
         /* remove outer rings around avatar */
@@ -94,6 +96,14 @@
             object-fit: cover;
             margin: 0;
             animation: floatY 6s ease-in-out infinite;
+            transition: filter 0.16s ease;
+        }
+
+        .avatar.avatar-press { filter: brightness(1.18) saturate(1.06); }
+
+        .avatar.avatar-pop {
+            animation: floatY 6s ease-in-out infinite, avatarPop 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
         }
 
         .avatar-wrap:hover { transform: translateY(-2px) scale(1.02); }
@@ -698,7 +708,26 @@
         var avatarWrap = document.querySelector('.avatar-wrap');
         if(avatarEl){
             avatarEl.style.cursor = 'pointer';
-            avatarEl.addEventListener('click', function(){
+            avatarEl.addEventListener('click', function(e){
+                if (!reduceMotion && avatarWrap) {
+                    var wrapRect = avatarWrap.getBoundingClientRect();
+                    var ripple = document.createElement('span');
+                    ripple.className = 'ripple ripple-avatar';
+                    ripple.style.left = (e.clientX - wrapRect.left) + 'px';
+                    ripple.style.top = (e.clientY - wrapRect.top) + 'px';
+                    avatarWrap.appendChild(ripple);
+                    var ring = document.createElement('span');
+                    ring.className = 'ripple-ring';
+                    ring.style.left = (e.clientX - wrapRect.left) + 'px';
+                    ring.style.top = (e.clientY - wrapRect.top) + 'px';
+                    avatarWrap.appendChild(ring);
+                    setTimeout(function(){ ripple.remove(); }, 600);
+                    setTimeout(function(){ ring.remove(); }, 800);
+                    avatarEl.classList.add('avatar-press');
+                    avatarEl.classList.add('avatar-pop');
+                    setTimeout(function(){ avatarEl.classList.remove('avatar-press'); }, 200);
+                    setTimeout(function(){ avatarEl.classList.remove('avatar-pop'); }, 240);
+                }
                 fetchImageList(true)
                     .then(function(list){ imageList = list || []; changeBackground(); })
                     .catch(function(){ if(imageList.length) changeBackground(); });
@@ -877,10 +906,41 @@
             filter: blur(1px);
             animation: ripple 0.6s ease-out;
             pointer-events: none;
+            z-index: 2;
+        }
+        .ripple-avatar {
+            background: rgba(255,255,255,0.55);
+            filter: blur(0.5px);
+            animation: rippleAvatar 0.7s ease-out;
+        }
+        .ripple-ring {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            margin-left: -8px;
+            margin-top: -8px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.85);
+            animation: rippleRing 0.8s ease-out;
+            pointer-events: none;
+            z-index: 2;
         }
         @keyframes ripple {
             from { transform: scale(0); opacity: 0.7; }
             to { transform: scale(12); opacity: 0; }
+        }
+        @keyframes rippleAvatar {
+            from { transform: scale(0); opacity: 0.85; }
+            to { transform: scale(18); opacity: 0; }
+        }
+        @keyframes rippleRing {
+            from { transform: scale(0.5); opacity: 0.9; }
+            to { transform: scale(12); opacity: 0; }
+        }
+        @keyframes avatarPop {
+            0% { transform: scale(1); }
+            45% { transform: scale(0.94); }
+            100% { transform: scale(1); }
         }
     </style>
 </body>
