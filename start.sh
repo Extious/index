@@ -1,0 +1,1 @@
+bash -lc '. "$HOME/.nvm/nvm.sh" && nohup env NO_UPDATE_CHECK=1 npx --yes serve -l 8000 --no-clipboard > /home/zhaozhan/index/nohup_output.log 2>&1 &'

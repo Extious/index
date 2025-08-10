@@ -1,0 +1,1 @@
+pkill -f 'serve -l 8000 --no-clipboard'

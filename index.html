@@ -370,8 +370,8 @@
 </head>
 <body>
     <canvas id="bg-particles"></canvas>
-    <button id="lang-toggle" class="lang-toggle" type="button" aria-label="Toggle language">EN</button>
-    <main class="container" data-lang="en">
+    <button id="lang-toggle" class="lang-toggle" type="button" aria-label="Toggle language">ZH</button>
+    <main class="container" data-lang="zh">
         <section class="profile">
             <div class="avatar-wrap">
             <img class="avatar" src="logo.jpg" alt="Avatar">
@@ -458,7 +458,7 @@
         }
 
         var app = document.querySelector('main.container');
-        var currentLang = (localStorage.getItem('lang') || app.getAttribute('data-lang') || 'en');
+        var currentLang = (localStorage.getItem('lang') || app.getAttribute('data-lang') || 'zh');
         function setLangLabel(){
             var btn = document.getElementById('lang-toggle');
             if (btn) btn.textContent = currentLang.toUpperCase();
