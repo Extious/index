@@ -78,6 +78,8 @@
             display: grid;
             place-items: center;
             will-change: transform;
+            transition: transform 0.15s ease;
+            transform-style: preserve-3d;
         }
 
         /* remove outer rings around avatar */
@@ -94,9 +96,20 @@
             animation: floatY 6s ease-in-out infinite;
         }
 
-        .avatar-wrap:hover {
-            animation: spinAvatar 1.2s linear infinite;
+        .avatar-wrap:hover { transform: translateY(-2px) scale(1.02); }
+
+        .avatar-wrap::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle 60px at var(--ax, 50%) var(--ay, 50%), rgba(255,255,255,0.08), transparent 60%);
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            pointer-events: none;
+            filter: blur(6px);
         }
+        .avatar-wrap:hover::after { opacity: 1; }
 
         .intro {
             display: flex;
@@ -280,6 +293,7 @@
         .nav-links > .nav-link:nth-child(1) { animation-delay: 0.05s; }
         .nav-links > .nav-link:nth-child(2) { animation-delay: 0.12s; }
         .nav-links > .nav-link:nth-child(3) { animation-delay: 0.2s; }
+        .nav-links > .nav-link:nth-child(4) { animation-delay: 0.28s; }
 
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(8px); }
@@ -292,9 +306,7 @@
             100% { transform: translateY(0); }
         }
 
-        @keyframes spinAvatar {
-            to { transform: rotate(360deg); }
-        }
+        /* removed spinAvatar animation */
 
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
@@ -389,6 +401,10 @@
             <a href="https://picture.zhaozhan.site" class="nav-link" target="_blank">
                     <h3 data-i18n="gallery">Gallery</h3>
                     <p data-i18n="galleryDesc">Photo collection and memories</p>
+            </a>
+            <a href="https://imgbed.zhaozhan.site" class="nav-link" target="_blank">
+                    <h3 data-i18n="imgbed">Image Bed</h3>
+                    <p data-i18n="imgbedDesc">Static image hosting</p>
             </a>
         </div>
         </section>
@@ -517,7 +533,9 @@
                 notes: 'Notes',
                 notesDesc: 'Knowledge and learning notes',
                 gallery: 'Gallery',
-                galleryDesc: 'Photo collection and memories'
+                galleryDesc: 'Photo collection and memories',
+                imgbed: 'Image Bed',
+                imgbedDesc: 'Static image hosting'
             },
             zh: {
                 siteTitle: 'Extious的空间',
@@ -528,7 +546,9 @@
                 notes: '笔记',
                 notesDesc: '知识笔记与学习记录',
                 gallery: '相册',
-                galleryDesc: '照片与回忆'
+                galleryDesc: '照片与回忆',
+                imgbed: '图床',
+                imgbedDesc: '静态图片托管'
             }
         };
         function applyI18n(){
@@ -550,6 +570,163 @@
                 applyI18n();
                 loadAbout();
                 loadTimeline();
+            });
+        }
+
+        // background images via jsDelivr Data API (avoid GitHub API rate limits)
+        var imageDataApi = 'https://data.jsdelivr.com/v1/package/gh/Extious/image-bed-hosting@master/flat';
+        var imagePagesPrefix = 'https://extious.github.io/image-bed-hosting/';
+        var imageCdnPrefix = 'https://cdn.jsdelivr.net/gh/Extious/image-bed-hosting@master/';
+        var imageList = [];
+        var currentBgIndex = -1;
+
+        function fetchImageList(force){
+            function toRawUrl(path){
+                var clean = String(path || '').replace(/^\//, '');
+                var bust = force ? ('?t=' + Date.now()) : '';
+                return 'https://raw.githubusercontent.com/Extious/image-bed-hosting/master/' + clean + bust;
+            }
+            function fromGithub(){
+                var url = 'https://api.github.com/repos/Extious/image-bed-hosting/git/trees/master?recursive=1';
+                return fetch(url, { cache: 'no-store' })
+                    .then(function(res){ if(!res.ok) throw new Error('bad status'); return res.json(); })
+                    .then(function(json){
+                        var tree = json && Array.isArray(json.tree) ? json.tree : [];
+                        return tree
+                            .filter(function(node){ return node && node.type === 'blob'; })
+                            .map(function(node){ return node.path; })
+                            .filter(function(name){
+                                if(!name) return false;
+                                var base = String(name).split('/').pop().toLowerCase();
+                                if(base.startsWith('.')) return false;
+                                return /\.(png|jpe?g|webp|gif)$/.test(base);
+                            })
+                            .map(function(name){ return toRawUrl(name); });
+                    });
+            }
+            function fromJsDelivr(){
+                var url = imageDataApi + (force ? ('?t=' + Date.now()) : '');
+                var options = force ? { cache: 'no-store' } : { cache: 'default' };
+                return fetch(url, options)
+                    .then(function(res){ if(!res.ok) throw new Error('bad status'); return res.json(); })
+                    .then(function(json){
+                        var files = Array.isArray(json) ? json : (json && Array.isArray(json.files) ? json.files : []);
+                        return files
+                            .map(function(f){ return f && (f.name || f.path || f.file || f.download_url); })
+                            .filter(function(name){
+                                if(!name) return false;
+                                name = String(name);
+                                var base = name.split('/').pop().toLowerCase();
+                                if(base.startsWith('.')) return false;
+                                return /\.(png|jpe?g|webp|gif)$/.test(base);
+                            })
+                            .map(function(name){
+                                name = String(name);
+                                if(/^https?:\/\//i.test(name)) return name;
+                                return toRawUrl(name);
+                            });
+                    });
+            }
+            // Prefer GitHub API for real-time accuracy; fallback to jsDelivr Data API
+            return fromGithub().catch(function(){ return fromJsDelivr(); });
+        }
+
+        function pickRandomIndex(){
+            if(!imageList.length) return -1;
+            if(imageList.length === 1) return 0;
+            var idx = currentBgIndex;
+            while(idx === currentBgIndex){
+                idx = Math.floor(Math.random() * imageList.length);
+            }
+            return idx;
+        }
+
+        function applyBackground(url){
+            if(!url) return;
+            var overlay = 'linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5))';
+            document.body.style.backgroundImage = overlay + ', url("' + url + '")';
+        }
+
+        function changeBackground(){
+            if(!imageList.length) return;
+            var nextIndex = pickRandomIndex();
+            if(nextIndex < 0) return;
+            var url = imageList[nextIndex];
+            var img = new Image();
+            img.onload = function(){
+                currentBgIndex = nextIndex;
+                applyBackground(url);
+            };
+            img.onerror = function(){
+                // fallback to CDN for the same file if GitHub Pages fails
+                if(url.indexOf(imagePagesPrefix) === 0){
+                    var rel = url.substring(imagePagesPrefix.length).replace(/^\//,'');
+                    var cdnUrl = imageCdnPrefix + rel;
+                    var imgCdn = new Image();
+                    imgCdn.onload = function(){ currentBgIndex = nextIndex; applyBackground(cdnUrl); };
+                    imgCdn.onerror = function(){
+                        // try another random pick
+                        var retryIndex = pickRandomIndex();
+                        if(retryIndex >= 0 && retryIndex !== nextIndex){
+                            var u2 = imageList[retryIndex];
+                            var img2 = new Image();
+                            img2.onload = function(){ currentBgIndex = retryIndex; applyBackground(u2); };
+                            img2.src = u2;
+                        }
+                    };
+                    imgCdn.src = cdnUrl;
+                    return;
+                }
+                // otherwise try another random pick
+                var retryIndex2 = pickRandomIndex();
+                if(retryIndex2 >= 0 && retryIndex2 !== nextIndex){
+                    var u3 = imageList[retryIndex2];
+                    var img3 = new Image();
+                    img3.onload = function(){ currentBgIndex = retryIndex2; applyBackground(u3); };
+                    img3.src = u3;
+                }
+            };
+            img.src = url;
+        }
+
+        fetchImageList(true)
+            .then(function(list){ imageList = list || []; })
+            .then(function(){ if(imageList.length) changeBackground(); })
+            .catch(function(){ /* ignore */ });
+
+        var avatarEl = document.querySelector('.avatar');
+        var avatarWrap = document.querySelector('.avatar-wrap');
+        if(avatarEl){
+            avatarEl.style.cursor = 'pointer';
+            avatarEl.addEventListener('click', function(){
+                fetchImageList(true)
+                    .then(function(list){ imageList = list || []; changeBackground(); })
+                    .catch(function(){ if(imageList.length) changeBackground(); });
+            });
+        }
+
+        // avatar subtle 3D tilt following pointer
+        if(avatarWrap && !reduceMotion){
+            var awMaxTilt = 10;
+            var awMaxTranslate = 6;
+            avatarWrap.addEventListener('pointermove', function(e){
+                var rect = avatarWrap.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var px = (x / rect.width) * 2 - 1;
+                var py = (y / rect.height) * 2 - 1;
+                var rotateY = px * awMaxTilt;
+                var rotateX = -py * awMaxTilt;
+                var tx = px * awMaxTranslate;
+                var ty = py * awMaxTranslate;
+                avatarWrap.style.transform = 'perspective(700px) translate3d(' + tx.toFixed(1) + 'px,' + ty.toFixed(1) + 'px, 0) rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' + rotateY.toFixed(2) + 'deg)';
+                avatarWrap.style.setProperty('--ax', x + 'px');
+                avatarWrap.style.setProperty('--ay', y + 'px');
+            });
+            avatarWrap.addEventListener('pointerleave', function(){
+                avatarWrap.style.transform = '';
+                avatarWrap.style.removeProperty('--ax');
+                avatarWrap.style.removeProperty('--ay');
             });
         }
 
