@@ -1,0 +1,28 @@
+# Disable Cloudflare features that might cause issues
+<IfModule mod_headers.c>
+    # Disable Cloudflare Insights if possible
+    Header always set CF-Visitors-Only "true"
+    
+    # Add security headers
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Content Security Policy removed to eliminate console errors
+    # Header always set Content-Security-Policy "..."
+</IfModule>
+
+# Disable server signature
+ServerSignature Off
+
+# Cache control for static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+</IfModule>
