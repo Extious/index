@@ -10,22 +10,32 @@
         (function() {
             'use strict';
             
-            // Try to load GitHub token from config.json, fallback to localStorage
+            // Check if token exists in localStorage first
+            const storedToken = localStorage.getItem('github_token');
+            if (storedToken) {
+                console.log('✅ GitHub token found in localStorage for increased API rate limits');
+                return;
+            }
+            
+            // Try to load GitHub token from config.json only if it exists
             fetch('config.json')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Config file not found');
+                    }
+                    return response.json();
+                })
                 .then(config => {
                     if (config.githubToken) {
                         localStorage.setItem('github_token', config.githubToken);
                         console.log('✅ GitHub token loaded from configuration for increased API rate limits');
                     } else {
-                        console.log('ℹ️ No GitHub token in config - check localStorage or use limited API rate');
+                        console.log('ℹ️ No GitHub token in config - using limited API rate (60 requests/hour)');
                     }
                 })
                 .catch(error => {
-                    // Check if token exists in localStorage
-                    const storedToken = localStorage.getItem('github_token');
-                    if (storedToken) {
-                        console.log('✅ GitHub token found in localStorage for increased API rate limits');
+                    if (error.message === 'Config file not found') {
+                        console.log('ℹ️ No config.json found - using limited API rate (60 requests/hour)');
                     } else {
                         console.log('ℹ️ No GitHub token configured - using limited API rate (60 requests/hour)');
                     }
