@@ -94,7 +94,15 @@
             } else {
                 console.log('📥 正在加载图片列表...');
             }
-            return this.loadFromGitHubAPI(forceRefresh);
+            return this.loadFromGitHubAPI(forceRefresh)
+                .then(imageList => {
+                    console.log(`🎯 图片列表加载成功，共 ${imageList.length} 张图片`);
+                    return imageList;
+                })
+                .catch(err => {
+                    console.error('❌ 图片列表加载失败:', err);
+                    throw err;
+                });
         },
 
 
@@ -172,7 +180,7 @@
                 const name = file && (file.name || file.path || file.file);
                 const isValid = this.isValidImageFile(name);
                 const url = name ? CONFIG.CDN_PREFIX + String(name).replace(/^\//, '') : null;
-                const isFailed = url ? this.failedUrls.has(url) : false;
+                const isFailed = url ? this.failedUrls.has(url) : null;
                 
                 processedFiles.push({
                     original: file,
@@ -195,6 +203,9 @@
                 throw new Error(`No valid images found from ${source}`);
             }
 
+            // Update the image list
+            this.imageList = newImageList;
+            
             return newImageList;
         },
 
