@@ -40,7 +40,6 @@
     // Configuration
     const CONFIG = {
         CDN_PREFIX: 'https://cdn.jsdelivr.net/gh/Extious/image-bed-hosting@master/',
-        API_URL: 'https://data.jsdelivr.com/v1/package/gh/Extious/image-bed-hosting@master/flat',
         PRELOAD_COUNT: 5,           // Number of images to preload
         MAX_RETRIES: 3,             // Max retry attempts for failed images
         CACHE_SIZE: 20,             // Maximum cached images
@@ -89,76 +88,16 @@
         },
 
         loadImageList: function(forceRefresh = false) {
-            // Smart API selection: compare both sources to detect sync issues
-            return this.smartLoadImageList(forceRefresh);
+            // Load images directly from GitHub API
+            if (forceRefresh) {
+                console.log('🔄 正在刷新图片列表...');
+            } else {
+                console.log('📥 正在加载图片列表...');
+            }
+            return this.loadFromGitHubAPI(forceRefresh);
         },
 
-        smartLoadImageList: function(forceRefresh = false) {
-            // Load from both APIs simultaneously to compare results
-            const githubPromise = this.loadFromGitHubAPI(forceRefresh).catch(err => {
-                console.warn('❌ GitHub API失败:', err.message);
-                return [];
-            });
-            
-            const jsdelivrPromise = this.loadFromJSDelivrAPI(forceRefresh).catch(err => {
-                console.error('❌ JSDelivr API失败:', err.message);
-                return [];
-            });
-            
-            return Promise.all([githubPromise, jsdelivrPromise])
-                .then(([githubList, jsdelivrList]) => {
-                    const githubCount = Array.isArray(githubList) ? githubList.length : 0;
-                    const jsdelivrCount = Array.isArray(jsdelivrList) ? jsdelivrList.length : 0;
-                    
-                    // 在控制台输出图片数量对比
-                    console.log(`📊 API图片数量对比: GitHub API ${githubCount} 张, JSDelivr CDN ${jsdelivrCount} 张`);
-                    
-                    let selectedList = [];
-                    let source = '';
-                    let needsSync = false;
-                    
-                    if (githubCount === jsdelivrCount && jsdelivrCount > 0) {
-                        // 数量相同，使用JSDelivr（更快的CDN）
-                        selectedList = jsdelivrList;
-                        source = 'JSDelivr CDN';
-                    } else if (githubCount !== jsdelivrCount) {
-                        // 数量不同，暂时使用GitHub API
-                        console.log(`🔄 图片数量不一致，差异: ${Math.abs(githubCount - jsdelivrCount)} 张图片`);
-                        selectedList = githubList;
-                        source = 'GitHub API (临时)';
-                        needsSync = true;
-                        
-                        // 显示同步提示并后台更新JSDelivr缓存
-                        if (githubCount > jsdelivrCount) {
-                            this.updateJSDelivrCacheInBackground();
-                        }
-                    } else if (githubCount > 0) {
-                        // JSDelivr没有数据，回退到GitHub
-                        selectedList = githubList;
-                        source = 'GitHub API (回退)';
-                        needsSync = true;
-                    } else {
-                        console.error('❌ 两个API都失败了');
-                        throw new Error('两个API都没有返回有效结果');
-                    }
-                    
-                    // Update image list and handle changes
-                    const previousCount = this.imageList.length;
-                    this.imageList = selectedList;
-                    
-                    // 输出最终选择结果
-                    console.log(`🎯 最终选择: ${source}, 加载图片数量: ${this.imageList.length} 张`);
-                    
-                    if (forceRefresh && previousCount !== this.imageList.length) {
-                        // Clear failed URLs on successful refresh
-                        this.failedUrls.clear();
-                        // Start preloading new images
-                        this.startPreloading();
-                    }
-                    
-                    return selectedList;
-                });
-        },
+
 
         loadFromGitHubAPI: function(forceRefresh = false) {
             const githubUrl = 'https://api.github.com/repos/Extious/image-bed-hosting/contents';
@@ -173,7 +112,12 @@
             // Add authorization header if token is available
             if (githubToken) {
                 headers['Authorization'] = `token ${githubToken}`;
+                console.log('🔑 使用 GitHub token 进行认证');
+            } else {
+                console.log('ℹ️ 未配置 GitHub token，使用受限的 API 速率');
             }
+            
+            console.log('🌐 正在从 GitHub API 获取图片列表...');
             
             return fetch(githubUrl, {
                 cache: forceRefresh ? 'no-cache' : 'default',
@@ -202,10 +146,11 @@
                 return response.json();
             })
             .then(data => {
-                                if (!Array.isArray(data)) {
+                if (!Array.isArray(data)) {
                     throw new Error('GitHub API did not return an array');
                 }
                 
+                console.log(`📊 GitHub API 返回 ${data.length} 个文件`);
                 return this.processFileList(data, forceRefresh, 'GitHub API');
             })
             .catch(err => {
@@ -214,66 +159,19 @@
             });
         },
 
-        loadFromJSDelivrAPI: function(forceRefresh = false) {
-            // Add timestamp to force cache bypass when refreshing
-            const url = forceRefresh ? 
-                `${CONFIG.API_URL}?t=${Date.now()}` : 
-                CONFIG.API_URL;
-            
-            return fetch(url, { 
-                cache: forceRefresh ? 'no-cache' : 'default',
-                signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`JSDelivr API ${response.status}: ${response.statusText}`);
-                }
-                return response.json();
-            })
-                            .then(data => {
-                    // 修复JSDelivr API响应处理
-                    let files = [];
-                    if (Array.isArray(data)) {
-                        // 直接是文件数组
-                        files = data;
-                    } else if (data && data.files && Array.isArray(data.files)) {
-                        // 包含files属性的对象
-                        files = data.files;
-                    } else if (data && data.paths && Array.isArray(data.paths)) {
-                        // 包含paths属性的对象（某些版本的JSDelivr API）
-                        files = data.paths;
-                    } else {
-                        console.warn('⚠️ JSDelivr API响应格式未知:', data);
-                        files = [];
-                    }
-                    
-                    return this.processFileList(files, forceRefresh, 'JSDelivr API');
-                });
-        },
+
 
         processFileList: function(files, forceRefresh, source) {
-
-            
-
-            
             // Initialize arrays
             const processedFiles = [];
             
-            // Detailed filtering process
+            console.log(`📁 正在处理 ${files.length} 个文件...`);
+            
+            // Process files from GitHub API
             files.forEach((file, index) => {
-                // Handle different API response formats
                 const name = file && (file.name || file.path || file.file);
                 const isValid = this.isValidImageFile(name);
-                let url;
-                
-                if (source === 'GitHub API') {
-                    // GitHub API returns direct file info
-                    url = name ? CONFIG.CDN_PREFIX + String(name).replace(/^\//, '') : null;
-                } else {
-                    // JSDelivr API format
-                    url = name ? CONFIG.CDN_PREFIX + String(name).replace(/^\//, '') : null;
-                }
-                
+                const url = name ? CONFIG.CDN_PREFIX + String(name).replace(/^\//, '') : null;
                 const isFailed = url ? this.failedUrls.has(url) : false;
                 
                 processedFiles.push({
@@ -291,6 +189,8 @@
                 .filter(item => item.included)
                 .map(item => item.url);
 
+            console.log(`✅ 处理完成: 总文件 ${files.length} 个, 有效图片 ${validImageFiles.length} 张, 可用图片 ${newImageList.length} 张`);
+
             if (newImageList.length === 0) {
                 throw new Error(`No valid images found from ${source}`);
             }
@@ -298,26 +198,7 @@
             return newImageList;
         },
 
-        updateJSDelivrCacheInBackground: function() {
-            // 后台清理JSDelivr缓存，但不重载页面
-            const apiPurgeUrl = CONFIG.API_URL.replace('https://data.jsdelivr.net/', 'https://purge.jsdelivr.net/');
-            
-            fetch(apiPurgeUrl, { 
-                method: 'GET',
-                cache: 'no-cache',
-                signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
-            })
-                .then(response => {
-                    if (response.ok) {
-                        console.log('✅ JSDelivr API缓存已清理，预计2-5分钟后同步最新内容');
-                    } else {
-                        console.warn('⚠️ JSDelivr缓存清理失败，响应状态:', response.status, response.statusText);
-                    }
-                })
-                .catch(err => {
-                    console.error('❌ JSDelivr缓存更新请求失败:', err.message);
-                });
-        },
+
 
         isValidImageFile: function(name) {
             if (!name || typeof name !== 'string') {
@@ -667,16 +548,6 @@
                     name: 'GitHub API',
                     url: 'https://api.github.com/repos/Extious/image-bed-hosting/contents',
                     headers: { 'Accept': 'application/vnd.github.v3+json' }
-                },
-                {
-                    name: 'JSDelivr Flat API',
-                    url: CONFIG.API_URL,
-                    headers: {}
-                },
-                {
-                    name: 'JSDelivr Package API',
-                    url: 'https://data.jsdelivr.com/v1/package/gh/Extious/image-bed-hosting',
-                    headers: {}
                 }
             ];
             
