@@ -5,6 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extious' Space</title>
     
+    <!-- GitHub token configuration -->
+    <script>
+        (function() {
+            'use strict';
+            
+            // Try to load GitHub token from config.json, fallback to localStorage
+            fetch('config.json')
+                .then(response => response.json())
+                .then(config => {
+                    if (config.githubToken) {
+                        localStorage.setItem('github_token', config.githubToken);
+                        console.log('✅ GitHub token loaded from configuration for increased API rate limits');
+                    } else {
+                        console.log('ℹ️ No GitHub token in config - check localStorage or use limited API rate');
+                    }
+                })
+                .catch(error => {
+                    // Check if token exists in localStorage
+                    const storedToken = localStorage.getItem('github_token');
+                    if (storedToken) {
+                        console.log('✅ GitHub token found in localStorage for increased API rate limits');
+                    } else {
+                        console.log('ℹ️ No GitHub token configured - using limited API rate (60 requests/hour)');
+                    }
+                });
+        })();
+    </script>
+    
     <!-- Comprehensive error suppression for external services -->
     <script>
         // Immediate error suppression - must be first
