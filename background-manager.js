@@ -1,8 +1,11 @@
-// Enhanced Background Image Manager - Version 3.1
+// Enhanced Background Image Manager - Version 3.4
 (function() {
     'use strict';
     
-    console.log('🚀 Background Manager v3.1 loaded!');
+    console.log('🚀 Background Manager v3.4 loaded!');
+    console.log('⚡ Performance optimizations enabled');
+    console.log('🔧 Enhanced error handling and retry logic');
+    console.log('🚀 First image priority loading enabled');
     
     // Suppress common external script errors
     window.addEventListener('error', function(e) {
@@ -40,13 +43,16 @@
     // Configuration
     const CONFIG = {
         CDN_PREFIX: 'https://cdn.jsdelivr.net/gh/Extious/image-bed-hosting@master/',
-        PRELOAD_COUNT: 5,           // Number of images to preload
-        MAX_RETRIES: 3,             // Max retry attempts for failed images
-        CACHE_SIZE: 20,             // Maximum cached images
-        SWITCH_ANIMATION_DURATION: 800, // Background transition duration
+        PRELOAD_COUNT: 1,           // Minimal preload for fastest initial load
+        MAX_RETRIES: 1,             // Single retry for faster fallback
+        CACHE_SIZE: 15,             // Reduced cache size for memory optimization
+        SWITCH_ANIMATION_DURATION: 400, // Even faster background transition
         SUPPORTED_FORMATS: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'PNG', 'JPG', 'JPEG', 'WEBP', 'GIF', 'SVG'],
-        AUTO_REFRESH_INTERVAL: 1800000, // Auto refresh every 30 minutes (reduced frequency)
-        MANUAL_REFRESH_COOLDOWN: 10000 // Minimum 10 seconds between manual refreshes
+        AUTO_REFRESH_INTERVAL: 1800000, // Auto refresh every 30 minutes
+        MANUAL_REFRESH_COOLDOWN: 5000,  // Further reduced cooldown
+        INITIAL_LOAD_TIMEOUT: 12000,    // 12 second timeout for initial load
+        LAZY_LOAD_DELAY: 1000,         // 1 second delay for regular preloading
+        FIRST_IMAGE_PRIORITY: true      // Enable first image priority loading
     };
 
     // Background Manager Class
@@ -74,33 +80,86 @@
 
     BackgroundManager.prototype = {
         init: function() {
+            console.log('Start initializing background manager...');
+            const startTime = performance.now();
+            
+            // Set initialization timeout
+            const initTimeout = setTimeout(() => {
+                if (!this.isInitialized) {
+                    console.warn('Initialization timeout, using fallback');
+                    this.handleInitializationError();
+                }
+            }, CONFIG.INITIAL_LOAD_TIMEOUT);
+            
             this.loadImageList()
                 .then(() => {
+                    clearTimeout(initTimeout);
+                    const loadTime = performance.now() - startTime;
+                    console.log(`Initialization completed, time: ${loadTime.toFixed(2)}ms`);
+                    
                     this.isInitialized = true;
-                    this.retryCount = 0; // Reset retry count on success
-                    this.startPreloading();
+                    this.retryCount = 0;
+                    
+                    // Start aggressive preloading for first image immediately
+                    this.preloadFirstImage();
+                    
+                    // Set initial background
                     this.setInitialBackground();
+                    
+                    // Start regular preloading after a short delay
+                    setTimeout(() => {
+                        this.startPreloading();
+                    }, 1000); // Reduced delay
+                    
                     this.startAutoRefresh();
                 })
                 .catch(err => {
+                    clearTimeout(initTimeout);
+                    console.error('Initialization failed:', err);
                     this.handleInitializationError();
                 });
+        },
+
+        preloadFirstImage: function() {
+            if (this.imageList.length === 0) return;
+            
+            console.log('Start preloading the first image immediately...');
+            const firstIndex = this.getNextImageIndex();
+            const firstUrl = this.imageList[firstIndex];
+            
+            if (firstUrl) {
+                // Use aggressive loading for first image
+                const img = new Image();
+                img.decoding = 'sync';
+                img.loading = 'eager';
+                
+                img.onload = () => {
+                    console.log('First image preload completed');
+                    this.cacheImage(firstUrl, img);
+                };
+                
+                img.onerror = () => {
+                    console.warn('First image preload failed');
+                };
+                
+                img.src = firstUrl;
+            }
         },
 
         loadImageList: function(forceRefresh = false) {
             // Load images directly from GitHub API
             if (forceRefresh) {
-                console.log('🔄 正在刷新图片列表...');
+                console.log('Refreshing image list...');
             } else {
-                console.log('📥 正在加载图片列表...');
+                console.log('Loading image list...');
             }
             return this.loadFromGitHubAPI(forceRefresh)
                 .then(imageList => {
-                    console.log(`🎯 图片列表加载成功，共 ${imageList.length} 张图片`);
+                    console.log(`Image list loaded successfully, ${imageList.length} images`);
                     return imageList;
                 })
                 .catch(err => {
-                    console.error('❌ 图片列表加载失败:', err);
+                    console.error('Image list load failed:', err);
                     throw err;
                 });
         },
@@ -120,12 +179,14 @@
             // Add authorization header if token is available
             if (githubToken) {
                 headers['Authorization'] = `token ${githubToken}`;
-                console.log('🔑 使用 GitHub token 进行认证');
+                console.log('Using GitHub token for authentication');
             } else {
-                console.log('ℹ️ 未配置 GitHub token，使用受限的 API 速率');
+                console.log('GitHub token not configured, using limited API rate');
             }
             
-            console.log('🌐 正在从 GitHub API 获取图片列表...');
+            console.log('Getting image list from GitHub API...');
+            console.log(`Target repository: Extious/image-bed-hosting`);
+            console.log(`Refresh mode: ${forceRefresh ? 'Force refresh' : 'Normal load'}`);
             
             return fetch(githubUrl, {
                 cache: forceRefresh ? 'no-cache' : 'default',
@@ -136,7 +197,7 @@
                 // Log rate limit information if available
                 const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
                 if (rateLimitRemaining !== null && parseInt(rateLimitRemaining) < 10) {
-                    console.warn('⚠️ GitHub API rate limit is low! Consider adding a token or reducing refresh frequency.');
+                    console.warn('GitHub API rate limit is low! Consider adding a token or reducing refresh frequency.');
                 }
                 
                 if (!response.ok) {
@@ -158,11 +219,12 @@
                     throw new Error('GitHub API did not return an array');
                 }
                 
-                console.log(`📊 GitHub API 返回 ${data.length} 个文件`);
+                console.log(`GitHub API returned ${data.length} files`);
+                console.log(`Processing file list...`);
                 return this.processFileList(data, forceRefresh, 'GitHub API');
             })
             .catch(err => {
-                console.error('💥 GitHub API Error:', err);
+                console.error('GitHub API Error:', err);
                 throw err;
             });
         },
@@ -173,7 +235,8 @@
             // Initialize arrays
             const processedFiles = [];
             
-            console.log(`📁 正在处理 ${files.length} 个文件...`);
+            console.log(`Processing ${files.length} files...`);
+            console.log(`Filtering valid image files...`);
             
             // Process files from GitHub API
             files.forEach((file, index) => {
@@ -197,7 +260,9 @@
                 .filter(item => item.included)
                 .map(item => item.url);
 
-            console.log(`✅ 处理完成: 总文件 ${files.length} 个, 有效图片 ${validImageFiles.length} 张, 可用图片 ${newImageList.length} 张`);
+            console.log(`Processing completed: Total files ${files.length}, valid images ${validImageFiles.length}, available images ${newImageList.length}`);
+            console.log(`Successfully retrieved ${newImageList.length} images from GitHub`);
+            console.log(`Image statistics: Total files=${files.length}, valid images=${validImageFiles.length}, available images=${newImageList.length}`);
 
             if (newImageList.length === 0) {
                 throw new Error(`No valid images found from ${source}`);
@@ -235,12 +300,19 @@
         startPreloading: function() {
             if (this.imageList.length === 0) return;
 
+            console.log('Start preloading images...');
             const preloadCount = Math.min(CONFIG.PRELOAD_COUNT, this.imageList.length);
             const startIndex = this.currentIndex >= 0 ? this.currentIndex : 0;
             
+            // Immediate preloading for faster response
             for (let i = 0; i < preloadCount; i++) {
                 const index = (startIndex + i) % this.imageList.length;
-                this.preloadImage(this.imageList[index]);
+                const url = this.imageList[index];
+                
+                // Load immediately without delays for faster response
+                this.preloadImage(url).catch(err => {
+                    console.warn(`Preload failed (${i + 1}/${preloadCount}):`, err.message);
+                });
             }
         },
 
@@ -256,19 +328,30 @@
                 const img = new Image();
                 img.decoding = 'async';
                 
+                // Shorter timeout for faster fallback
+                const timeout = setTimeout(() => {
+                    cleanup();
+                    this.failedUrls.add(url);
+                    console.warn(`Preload timeout: ${url}`);
+                    reject(new Error(`Preload timeout for ${url}`));
+                }, 10000); // Reduced timeout for faster response
+                
                 const cleanup = () => {
+                    clearTimeout(timeout);
                     this.loadingQueue.delete(url);
                 };
 
                 img.onload = () => {
                     cleanup();
                     this.cacheImage(url, img);
+                    console.log(`Preload successful: ${url}`);
                     resolve(img);
                 };
 
                 img.onerror = () => {
                     cleanup();
                     this.failedUrls.add(url);
+                    console.warn(`Preload failed: ${url}`);
                     reject(new Error(`Failed to load ${url}`));
                 };
 
@@ -306,20 +389,78 @@
         setInitialBackground: function() {
             if (this.imageList.length === 0) return;
 
-            const index = this.getNextImageIndex();
-            if (index >= 0) {
-                this.currentIndex = index;
-                const url = this.imageList[index];
-                
-                if (this.preloadedImages.has(url)) {
-                    this.applyBackground(url);
-                } else {
-                    this.preloadImage(url).then(() => {
-                        this.applyBackground(url);
-                    }).catch(() => {
-                        this.switchToNext();
-                    });
+            console.log('Set initial background...');
+            
+            // Try to find a preloaded image first
+            let selectedUrl = null;
+            let selectedIndex = -1;
+            
+            // Check if we have any preloaded images
+            if (this.preloadedImages.size > 0) {
+                const preloadedUrls = Array.from(this.preloadedImages.keys());
+                selectedUrl = preloadedUrls[0];
+                selectedIndex = this.imageList.indexOf(selectedUrl);
+                console.log('Use preloaded image as initial background');
+            } else {
+                // Select a random image and load it immediately
+                const index = this.getNextImageIndex();
+                if (index >= 0) {
+                    selectedIndex = index;
+                    selectedUrl = this.imageList[index];
+                    console.log('Load initial background image immediately...');
                 }
+            }
+            
+            if (selectedUrl && selectedIndex >= 0) {
+                this.currentIndex = selectedIndex;
+                this.applyBackground(selectedUrl);
+                
+                // Start loading the actual image if not preloaded
+                if (!this.preloadedImages.has(selectedUrl)) {
+                    this.loadInitialBackground(selectedUrl, selectedIndex);
+                }
+            }
+        },
+
+        loadInitialBackground: function(url, index, retryCount = 0) {
+            const maxRetries = 2; // Reduced retries for faster fallback
+            
+            // Use a more aggressive loading strategy
+            const img = new Image();
+            img.decoding = 'sync'; // Use sync decoding for immediate display
+            img.loading = 'eager'; // Force eager loading
+            
+            const timeout = setTimeout(() => {
+                img.src = ''; // Cancel loading
+                this.handleImageLoadFailure(url, index, retryCount, 'Load timeout');
+            }, 8000); // Shorter timeout for initial load
+            
+            img.onload = () => {
+                clearTimeout(timeout);
+                console.log('Initial background image loaded');
+                this.cacheImage(url, img);
+            };
+            
+            img.onerror = () => {
+                clearTimeout(timeout);
+                this.handleImageLoadFailure(url, index, retryCount, 'Load failed');
+            };
+            
+            img.src = url;
+        },
+
+        handleImageLoadFailure: function(url, index, retryCount, reason) {
+            console.warn(`Initial background image ${reason} (attempt ${retryCount + 1}/2): ${url}`);
+            
+            if (retryCount < 1) {
+                // Try the same image again with shorter delay
+                setTimeout(() => {
+                    this.loadInitialBackground(url, index, retryCount + 1);
+                }, 500); // Faster retry
+            } else {
+                // Try next image immediately
+                console.log('Try next image...');
+                this.switchToNext();
             }
         },
 
@@ -531,6 +672,7 @@
         },
 
         handleInitializationError: function() {
+            console.warn('Initialization failed, using default background');
             const defaultGradient = 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)';
             document.body.style.backgroundImage = defaultGradient;
             
@@ -542,11 +684,48 @@
             const retryDelay = Math.min(5000 * Math.pow(2, (this.retryCount || 0)), 30000);
             this.retryCount = (this.retryCount || 0) + 1;
             
-            console.log(`Retrying initialization in ${retryDelay}ms (attempt ${this.retryCount})`);
+            console.log(`Retry initialization in ${retryDelay}ms (attempt ${this.retryCount})`);
+            
+            // Show user-friendly error message
+            this.showErrorMessage('Background image load failed, retrying...');
             
             setTimeout(() => {
                 this.init();
             }, retryDelay);
+        },
+
+        showErrorMessage: function(message) {
+            // Remove existing error message
+            const existingError = document.getElementById('bg-error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const errorEl = document.createElement('div');
+            errorEl.id = 'bg-error-message';
+            errorEl.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(239, 68, 68, 0.9);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                z-index: 10000;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            `;
+            errorEl.textContent = message;
+            document.body.appendChild(errorEl);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (errorEl.parentNode) {
+                    errorEl.parentNode.removeChild(errorEl);
+                }
+            }, 5000);
         },
 
         forceRefresh: function() {
@@ -636,10 +815,36 @@
         }
     };
 
+    // Performance monitoring
+    const performanceObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+            if (entry.entryType === 'navigation') {
+                console.log(`Page load performance: ${entry.loadEventEnd - entry.loadEventStart}ms`);
+            }
+        }
+    });
+    
+    if (performanceObserver.observe) {
+        performanceObserver.observe({ entryTypes: ['navigation'] });
+    }
+    
+    // Network status detection
+    let isOnline = navigator.onLine;
+    window.addEventListener('online', () => {
+        isOnline = true;
+        console.log('Network connection restored');
+        if (window.backgroundManager && window.backgroundManager.isInitialized) {
+            window.backgroundManager.forceRefresh();
+        }
+    });
+    
+    window.addEventListener('offline', () => {
+        isOnline = false;
+        console.log('Network connection lost');
+    });
+    
     // Create global instance
     window.backgroundManager = new BackgroundManager();
-        
-        // Keep only essential functions
 
     // Enhanced avatar click handler with beautiful loading effects
     function setupAvatarClickHandler() {
@@ -674,7 +879,7 @@
                 .then((newImageUrl) => {
                     // Success animations
                     showSuccessAnimation(avatarEl, transitionOverlay);
-                    console.log('🎨 Background changed successfully!');
+                    console.log('Background changed successfully!');
                 })
                 .catch(err => {
                     console.warn('Failed to switch background:', err);

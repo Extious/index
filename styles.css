@@ -1,7 +1,23 @@
+/* Critical CSS for above-the-fold content */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+/* Optimize paint and layout */
+body {
+    will-change: background-image;
+    contain: layout style paint;
+}
+
+.container {
+    contain: layout style;
+}
+
+.avatar-wrap {
+    contain: layout style paint;
+    will-change: transform;
 }
 
 :root {

@@ -135,10 +135,23 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <!-- CSP removed to eliminate console errors while maintaining functionality -->
+    <!-- DNS预解析和预连接 -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com">
+    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="//api.github.com">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://api.github.com">
+    
+    <!-- 关键资源预加载 -->
     <link rel="preload" href="script.js" as="script">
-    <link rel="preload" href="logo.jpg" as="image">
+    <link rel="preload" href="logo.jpg" as="image" type="image/jpeg">
+    <link rel="preload" href="styles.css" as="style">
+    
+    <!-- 字体优化加载 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet"></noscript>
     <style>
@@ -513,8 +526,8 @@
             }
         }
     </style>
-    <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="styles.css"></noscript>
+    <!-- 样式表优化加载 -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <button id="lang-toggle" class="lang-toggle" type="button" aria-label="Toggle language">ZH</button>
@@ -557,7 +570,11 @@
         </div>
         </section>
     </main>
-    <script src="background-manager.js?v=3.1" defer></script>
+    <!-- 性能优化配置 -->
+    <script src="performance-config.js"></script>
+    
+    <!-- 脚本优化加载 -->
+    <script src="background-manager.js?v=3.4" defer></script>
     <script src="script.js" defer></script>
 </body>
 </html>
